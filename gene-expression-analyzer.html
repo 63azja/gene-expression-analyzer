@@ -1,0 +1,566 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Gene Expression Analyzer</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,500;9..144,600&family=Work+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/d3/7.9.0/d3.min.js"></script>
+<style>
+  :root {
+    --bg: #EEF1EA;
+    --well: #E2E7DB;
+    --well-border: #C6CEBC;
+    --ink: #17241D;
+    --ink-soft: #4B5B4E;
+    --primary: #3F6B4E;
+    --primary-deep: #2C4E37;
+    --up: #C1502E;
+    --down: #35618C;
+    --neutral-point: #9CA69B;
+    --card-bg: #F6F8F2;
+    --serif: 'Fraunces', Georgia, serif;
+    --sans: 'Work Sans', Arial, sans-serif;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #141C16;
+      --well: #1E2A20;
+      --well-border: #33452F;
+      --ink: #EDF1E8;
+      --ink-soft: #AEBBAA;
+      --primary: #6FA681;
+      --primary-deep: #8FC49E;
+      --up: #E07A54;
+      --down: #6FA0C9;
+      --neutral-point: #6C786A;
+      --card-bg: #1A241C;
+    }
+  }
+  :root[data-theme="dark"] {
+    --bg: #141C16;
+    --well: #1E2A20;
+    --well-border: #33452F;
+    --ink: #EDF1E8;
+    --ink-soft: #AEBBAA;
+    --primary: #6FA681;
+    --primary-deep: #8FC49E;
+    --up: #E07A54;
+    --down: #6FA0C9;
+    --neutral-point: #6C786A;
+    --card-bg: #1A241C;
+  }
+  * { box-sizing: border-box; }
+  html { scroll-padding-top: env(safe-area-inset-top, 0px); }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--ink);
+    font-family: var(--sans);
+    padding-top: env(safe-area-inset-top, 0px);
+    padding-bottom: env(safe-area-inset-bottom, 0px);
+    line-height: 1.5;
+  }
+  .wrap {
+    max-width: 1080px;
+    margin: 0 auto;
+    padding: 48px 24px 80px;
+  }
+  header.top {
+    border-bottom: 1px solid var(--well-border);
+    padding-bottom: 28px;
+    margin-bottom: 36px;
+  }
+  header.top h1 {
+    font-family: var(--serif);
+    font-weight: 600;
+    font-size: clamp(28px, 4vw, 42px);
+    margin: 0 0 8px;
+    letter-spacing: -0.01em;
+  }
+  header.top p {
+    margin: 0;
+    color: var(--ink-soft);
+    font-size: 15px;
+    max-width: 60ch;
+  }
+  section { margin-bottom: 40px; }
+  h2 {
+    font-family: var(--serif);
+    font-weight: 500;
+    font-size: 20px;
+    margin: 0 0 14px;
+  }
+  .dropzone {
+    border: 1.5px dashed var(--well-border);
+    background: var(--card-bg);
+    border-radius: 4px;
+    padding: 32px 24px;
+    text-align: center;
+    cursor: pointer;
+    transition: border-color .15s ease;
+  }
+  .dropzone:hover, .dropzone.drag { border-color: var(--primary); }
+  .dropzone p { margin: 0; color: var(--ink-soft); font-size: 14px; }
+  .dropzone strong { color: var(--ink); font-weight: 600; }
+  input[type="file"] { display: none; }
+
+  .plate {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(84px, 1fr));
+    gap: 6px;
+  }
+  .well {
+    border: 1px solid var(--well-border);
+    background: var(--well);
+    border-radius: 3px;
+    padding: 10px 8px;
+    text-align: center;
+  }
+  .well .n {
+    font-family: var(--serif);
+    font-size: 22px;
+    line-height: 1.1;
+  }
+  .well .l {
+    font-size: 11px;
+    color: var(--ink-soft);
+    margin-top: 4px;
+  }
+
+  .assign-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+    gap: 8px;
+  }
+  .sample-card {
+    border: 1px solid var(--well-border);
+    background: var(--card-bg);
+    border-radius: 4px;
+    padding: 10px 12px;
+  }
+  .sample-card .name {
+    font-size: 13px;
+    font-weight: 600;
+    margin-bottom: 8px;
+    overflow-wrap: anywhere;
+  }
+  .toggle {
+    display: flex;
+    border: 1px solid var(--well-border);
+    border-radius: 3px;
+    overflow: hidden;
+    font-size: 12px;
+  }
+  .toggle button {
+    flex: 1;
+    border: none;
+    background: transparent;
+    padding: 5px 4px;
+    cursor: pointer;
+    color: var(--ink-soft);
+    font-family: var(--sans);
+  }
+  .toggle button.a.active { background: var(--up); color: #fff; }
+  .toggle button.b.active { background: var(--down); color: #fff; }
+
+  .controls {
+    display: flex;
+    gap: 18px;
+    flex-wrap: wrap;
+    align-items: end;
+    margin-bottom: 18px;
+  }
+  .field label {
+    display: block;
+    font-size: 12px;
+    color: var(--ink-soft);
+    margin-bottom: 4px;
+  }
+  .field input {
+    width: 90px;
+    padding: 6px 8px;
+    border: 1px solid var(--well-border);
+    border-radius: 3px;
+    background: var(--card-bg);
+    color: var(--ink);
+    font-family: var(--sans);
+  }
+
+  button.primary {
+    background: var(--primary);
+    color: #fff;
+    border: none;
+    border-radius: 3px;
+    padding: 10px 20px;
+    font-family: var(--sans);
+    font-weight: 600;
+    font-size: 14px;
+    cursor: pointer;
+  }
+  button.primary:hover { background: var(--primary-deep); }
+  button.primary:disabled { background: var(--well-border); cursor: not-allowed; }
+
+  .results-grid {
+    display: grid;
+    grid-template-columns: 1.1fr 1fr;
+    gap: 24px;
+  }
+  @media (max-width: 780px) {
+    .results-grid { grid-template-columns: 1fr; }
+  }
+  .panel {
+    border: 1px solid var(--well-border);
+    background: var(--card-bg);
+    border-radius: 4px;
+    padding: 16px;
+  }
+  .panel h3 {
+    font-family: var(--serif);
+    font-weight: 500;
+    font-size: 15px;
+    margin: 0 0 10px;
+  }
+  svg text { font-family: var(--sans); fill: var(--ink-soft); }
+  .axis path, .axis line { stroke: var(--well-border); }
+  .legend-dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 5px; }
+
+  table { width: 100%; border-collapse: collapse; font-size: 12.5px; }
+  th, td {
+    text-align: left;
+    padding: 6px 8px;
+    border-bottom: 1px solid var(--well-border);
+    overflow-wrap: anywhere;
+  }
+  th { color: var(--ink-soft); font-weight: 600; cursor: pointer; user-select: none; }
+  th:hover { color: var(--ink); }
+  .table-scroll { max-height: 360px; overflow-y: auto; overflow-x: auto; }
+  tr.up td.fc { color: var(--up); font-weight: 600; }
+  tr.down td.fc { color: var(--down); font-weight: 600; }
+
+  .footer-actions { display: flex; gap: 12px; align-items: center; }
+  .note { color: var(--ink-soft); font-size: 12px; margin-top: 8px; }
+  .empty { color: var(--ink-soft); font-size: 13px; padding: 20px 0; }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <header class="top">
+    <h1>Gene Expression Analyzer</h1>
+    <p>Upload a gene-by-sample expression matrix, assign samples to two groups, and get fold-change, significance, and a volcano plot — all computed locally in your browser.</p>
+  </header>
+
+  <section id="uploadSection">
+    <h2>1. Upload expression matrix</h2>
+    <div class="dropzone" id="dropzone">
+      <p><strong>Click to choose a CSV</strong> or drag one here</p>
+      <p style="margin-top:6px;">First column: gene ID. Remaining columns: one per sample, numeric expression values.</p>
+    </div>
+    <input type="file" id="fileInput" accept=".csv">
+    <p class="note" id="fileStatus"></p>
+  </section>
+
+  <section id="assignSection" style="display:none;">
+    <h2>2. Assign samples to groups</h2>
+    <div class="assign-grid" id="assignGrid"></div>
+  </section>
+
+  <section id="summarySection" style="display:none;">
+    <h2>3. Run analysis</h2>
+    <div class="controls">
+      <div class="field">
+        <label>log2 fold-change threshold</label>
+        <input type="number" id="fcThresh" value="1" step="0.1">
+      </div>
+      <div class="field">
+        <label>p-value threshold</label>
+        <input type="number" id="pThresh" value="0.05" step="0.01">
+      </div>
+      <button class="primary" id="runBtn">Run analysis</button>
+    </div>
+    <div class="plate" id="plate"></div>
+  </section>
+
+  <section id="resultsSection" style="display:none;">
+    <h2>4. Results</h2>
+    <div class="results-grid">
+      <div class="panel">
+        <h3>Volcano plot</h3>
+        <div id="volcano"></div>
+        <div class="note">
+          <span class="legend-dot" style="background:var(--up)"></span>Up in Group B
+          &nbsp;&nbsp;<span class="legend-dot" style="background:var(--down)"></span>Down in Group B
+          &nbsp;&nbsp;<span class="legend-dot" style="background:var(--neutral-point)"></span>Not significant
+        </div>
+      </div>
+      <div class="panel">
+        <h3>Gene table <span style="font-weight:400; color:var(--ink-soft);">(click a column to sort)</span></h3>
+        <div class="table-scroll">
+          <table id="resultsTable">
+            <thead>
+              <tr>
+                <th data-key="gene">Gene</th>
+                <th data-key="log2fc">log2FC</th>
+                <th data-key="pvalue">p-value</th>
+                <th data-key="meanA">Mean A</th>
+                <th data-key="meanB">Mean B</th>
+              </tr>
+            </thead>
+            <tbody></tbody>
+          </table>
+        </div>
+        <div class="footer-actions" style="margin-top:14px;">
+          <button class="primary" id="downloadBtn">Download results CSV</button>
+        </div>
+        <p class="note">p-values use a Welch's t-test statistic with a normal approximation — treat as indicative, not publication-grade.</p>
+      </div>
+    </div>
+  </section>
+
+</div>
+
+<script>
+let parsedRows = [];
+let sampleCols = [];
+let groupAssignment = {}; // sampleName -> 'A' | 'B'
+let analysisResults = [];
+let sortState = { key: 'pvalue', asc: true };
+
+const dropzone = document.getElementById('dropzone');
+const fileInput = document.getElementById('fileInput');
+const fileStatus = document.getElementById('fileStatus');
+
+dropzone.addEventListener('click', () => fileInput.click());
+dropzone.addEventListener('dragover', e => { e.preventDefault(); dropzone.classList.add('drag'); });
+dropzone.addEventListener('dragleave', () => dropzone.classList.remove('drag'));
+dropzone.addEventListener('drop', e => {
+  e.preventDefault();
+  dropzone.classList.remove('drag');
+  if (e.dataTransfer.files.length) handleFile(e.dataTransfer.files[0]);
+});
+fileInput.addEventListener('change', e => {
+  if (e.target.files.length) handleFile(e.target.files[0]);
+});
+
+function handleFile(file) {
+  fileStatus.textContent = 'Parsing ' + file.name + ' …';
+  Papa.parse(file, {
+    header: true,
+    dynamicTyping: true,
+    skipEmptyLines: true,
+    complete: (res) => {
+      if (!res.data.length || !res.meta.fields || res.meta.fields.length < 2) {
+        fileStatus.textContent = 'Could not read that file — needs a gene-ID column plus at least one sample column.';
+        return;
+      }
+      parsedRows = res.data;
+      sampleCols = res.meta.fields.slice(1);
+      groupAssignment = {};
+      sampleCols.forEach((s, i) => { groupAssignment[s] = i % 2 === 0 ? 'A' : 'B'; });
+      fileStatus.textContent = `Loaded ${parsedRows.length} genes across ${sampleCols.length} samples.`;
+      renderAssignGrid();
+      document.getElementById('assignSection').style.display = '';
+      document.getElementById('summarySection').style.display = '';
+      document.getElementById('resultsSection').style.display = 'none';
+    },
+    error: () => { fileStatus.textContent = 'Failed to parse file.'; }
+  });
+}
+
+function renderAssignGrid() {
+  const grid = document.getElementById('assignGrid');
+  grid.innerHTML = '';
+  sampleCols.forEach(s => {
+    const card = document.createElement('div');
+    card.className = 'sample-card';
+    card.innerHTML = `
+      <div class="name">${s}</div>
+      <div class="toggle">
+        <button class="a ${groupAssignment[s]==='A'?'active':''}" data-sample="${s}" data-g="A">Group A</button>
+        <button class="b ${groupAssignment[s]==='B'?'active':''}" data-sample="${s}" data-g="B">Group B</button>
+      </div>
+    `;
+    grid.appendChild(card);
+  });
+  grid.querySelectorAll('button').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const s = btn.dataset.sample, g = btn.dataset.g;
+      groupAssignment[s] = g;
+      renderAssignGrid();
+    });
+  });
+}
+
+// Normal CDF via erf approximation (Abramowitz & Stegun)
+function erf(x) {
+  const sign = x < 0 ? -1 : 1;
+  x = Math.abs(x);
+  const a1=0.254829592, a2=-0.284496736, a3=1.421413741, a4=-1.453152027, a5=1.061405429, p=0.3275911;
+  const t = 1/(1+p*x);
+  const y = 1 - (((((a5*t+a4)*t)+a3)*t+a2)*t+a1)*t*Math.exp(-x*x);
+  return sign*y;
+}
+function normalCdf(z) { return 0.5*(1+erf(z/Math.SQRT2)); }
+function twoSidedP(z) { return 2*(1-normalCdf(Math.abs(z))); }
+
+function mean(arr) { return arr.reduce((a,b)=>a+b,0)/arr.length; }
+function variance(arr, m) { return arr.reduce((a,b)=>a+(b-m)*(b-m),0)/(arr.length-1 || 1); }
+
+function runAnalysis() {
+  const groupA = sampleCols.filter(s => groupAssignment[s] === 'A');
+  const groupB = sampleCols.filter(s => groupAssignment[s] === 'B');
+  if (groupA.length < 2 || groupB.length < 2) {
+    alert('Each group needs at least 2 samples for a t-test.');
+    return;
+  }
+  const geneKey = Object.keys(parsedRows[0])[0];
+  const results = [];
+  const pseudo = 1e-6;
+
+  for (const row of parsedRows) {
+    const gene = row[geneKey];
+    if (gene === null || gene === undefined || gene === '') continue;
+    const valsA = groupA.map(s => Number(row[s])).filter(v => !isNaN(v));
+    const valsB = groupB.map(s => Number(row[s])).filter(v => !isNaN(v));
+    if (valsA.length < 2 || valsB.length < 2) continue;
+
+    const mA = mean(valsA), mB = mean(valsB);
+    const vA = variance(valsA, mA), vB = variance(valsB, mB);
+    const se = Math.sqrt(vA/valsA.length + vB/valsB.length) || pseudo;
+    const t = (mB - mA) / se;
+    const p = isFinite(t) ? twoSidedP(t) : 1;
+    const log2fc = Math.log2((mB + pseudo) / (mA + pseudo));
+
+    results.push({ gene, meanA: mA, meanB: mB, log2fc, pvalue: p });
+  }
+  analysisResults = results;
+  renderSummaryPlate(groupA.length, groupB.length, results.length);
+  renderResults();
+  document.getElementById('resultsSection').style.display = '';
+}
+
+function renderSummaryPlate(nA, nB, nGenes) {
+  const fcT = parseFloat(document.getElementById('fcThresh').value) || 1;
+  const pT = parseFloat(document.getElementById('pThresh').value) || 0.05;
+  const up = analysisResults.filter(r => r.log2fc >= fcT && r.pvalue <= pT).length;
+  const down = analysisResults.filter(r => r.log2fc <= -fcT && r.pvalue <= pT).length;
+  const plate = document.getElementById('plate');
+  const wells = [
+    ['Genes tested', nGenes],
+    ['Group A n', nA],
+    ['Group B n', nB],
+    ['Up in B', up],
+    ['Down in B', down],
+  ];
+  plate.innerHTML = wells.map(([l,n]) => `<div class="well"><div class="n">${n}</div><div class="l">${l}</div></div>`).join('');
+}
+
+function renderResults() {
+  renderVolcano();
+  renderTable();
+}
+
+function renderVolcano() {
+  const fcT = parseFloat(document.getElementById('fcThresh').value) || 1;
+  const pT = parseFloat(document.getElementById('pThresh').value) || 0.05;
+  const container = document.getElementById('volcano');
+  container.innerHTML = '';
+  const width = container.clientWidth || 460, height = 340;
+  const margin = { top: 12, right: 16, bottom: 40, left: 46 };
+
+  const data = analysisResults.map(r => ({
+    ...r,
+    x: r.log2fc,
+    y: r.pvalue > 0 ? -Math.log10(r.pvalue) : 12
+  }));
+
+  const svg = d3.select(container).append('svg')
+    .attr('viewBox', `0 0 ${width} ${height}`)
+    .attr('width', '100%').attr('height', height);
+
+  const xExtent = d3.extent(data, d => d.x);
+  const x = d3.scaleLinear()
+    .domain([Math.min(-fcT-1, xExtent[0] || -2), Math.max(fcT+1, xExtent[1] || 2)])
+    .range([margin.left, width - margin.right]);
+  const yMax = d3.max(data, d => d.y) || 1;
+  const y = d3.scaleLinear().domain([0, yMax * 1.1]).range([height - margin.bottom, margin.top]);
+
+  svg.append('g').attr('class','axis').attr('transform', `translate(0,${height-margin.bottom})`).call(d3.axisBottom(x).ticks(6));
+  svg.append('g').attr('class','axis').attr('transform', `translate(${margin.left},0)`).call(d3.axisLeft(y).ticks(5));
+
+  svg.append('text').attr('x', width/2).attr('y', height-4).attr('text-anchor','middle').style('font-size','11px').text('log2 fold change');
+  svg.append('text').attr('transform','rotate(-90)').attr('x', -height/2).attr('y', 12).attr('text-anchor','middle').style('font-size','11px').text('-log10(p)');
+
+  svg.selectAll('circle').data(data).enter().append('circle')
+    .attr('cx', d => x(d.x))
+    .attr('cy', d => y(d.y))
+    .attr('r', 3)
+    .attr('fill', d => {
+      if (d.pvalue <= pT && d.x >= fcT) return getComputedStyle(document.documentElement).getPropertyValue('--up');
+      if (d.pvalue <= pT && d.x <= -fcT) return getComputedStyle(document.documentElement).getPropertyValue('--down');
+      return getComputedStyle(document.documentElement).getPropertyValue('--neutral-point');
+    })
+    .attr('opacity', 0.75)
+    .append('title').text(d => `${d.gene}\nlog2FC ${d.x.toFixed(2)}, p ${d.pvalue.toExponential(2)}`);
+}
+
+function renderTable() {
+  const fcT = parseFloat(document.getElementById('fcThresh').value) || 1;
+  const pT = parseFloat(document.getElementById('pThresh').value) || 0.05;
+  const tbody = document.querySelector('#resultsTable tbody');
+  const sorted = [...analysisResults].sort((a,b) => {
+    const dir = sortState.asc ? 1 : -1;
+    return (a[sortState.key] - b[sortState.key]) * dir;
+  });
+  const top = sorted.slice(0, 300);
+  tbody.innerHTML = top.map(r => {
+    let cls = '';
+    if (r.pvalue <= pT && r.log2fc >= fcT) cls = 'up';
+    else if (r.pvalue <= pT && r.log2fc <= -fcT) cls = 'down';
+    return `<tr class="${cls}">
+      <td>${r.gene}</td>
+      <td class="fc">${r.log2fc.toFixed(2)}</td>
+      <td>${r.pvalue.toExponential(2)}</td>
+      <td>${r.meanA.toFixed(2)}</td>
+      <td>${r.meanB.toFixed(2)}</td>
+    </tr>`;
+  }).join('');
+}
+
+document.querySelectorAll('#resultsTable th').forEach(th => {
+  th.addEventListener('click', () => {
+    const key = th.dataset.key;
+    if (key === 'gene') return;
+    if (sortState.key === key) sortState.asc = !sortState.asc;
+    else { sortState.key = key; sortState.asc = true; }
+    renderTable();
+  });
+});
+
+document.getElementById('runBtn').addEventListener('click', runAnalysis);
+
+document.getElementById('downloadBtn').addEventListener('click', async () => {
+  if (!analysisResults.length) return;
+  const header = 'gene,log2fc,pvalue,meanA,meanB\n';
+  const rows = analysisResults.map(r => `${r.gene},${r.log2fc},${r.pvalue},${r.meanA},${r.meanB}`).join('\n');
+  const csv = header + rows;
+
+  const downloads = (window.claude && window.claude.use) ? await window.claude.use('downloads') : null;
+  if (downloads) {
+    try {
+      await downloads.save({ filename: 'gene-expression-results.csv', data: csv });
+      return;
+    } catch (e) { /* fall through to manual copy */ }
+  }
+  // Fallback: open a data URL the viewer can save manually
+  const blob = new Blob([csv], { type: 'text/csv' });
+  const url = URL.createObjectURL(blob);
+  window.open(url, '_blank');
+});
+</script>
+</body>
+</html>
